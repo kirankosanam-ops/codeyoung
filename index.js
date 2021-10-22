@@ -1,39 +1,52 @@
 // requiring the packages
-// const trn = require('./model/translate');
-// const Coupon = require("./models/couponmodel");
+
 const db = require('./database/dboperations')
 const bodyParser = require('body-parser');
 const express = require('express');
-const cors = require('cors');
 const unirest = require("unirest");
+
 const app = express();
-const router = express.Router();
 
-
+// Configuring app to use body parser
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
 
-app.get('/', function (req, res) {
+// Get request with source language and target language as required parameters
+app.get('/:sLang/:tLang', function (req, res) {
+    // console.log(req.params.sLang);
+    // console.log(req.params.tLang);
+
     let c = {...req.body};
-    let sText = c['text'], sLang = c['fromLanguage'], tLang = c['toLanguage']
+    let sText = c['text'];
+    let sLang = req.params.sLang;
+    let tLang = req.params.tLang;
+
+    // Checking if requested translation is requested before
     db.isFound(sText, '', sLang, tLang).then(result => {
 
-        console.log(result);
+        // console.log(result);
         let oldTranslation;
-        if (result[0].length === 0){
+        if (result[0].length === 0) {
             oldTranslation = false;
-        }else{
+        } else {
             oldTranslation = true;
         }
-        console.log("In function isFound oldTranslation value is: " + oldTranslation);
-        if (oldTranslation) {
-            console.log("In if block oldTranslation value is: " + oldTranslation);
-            res.send("Old Translation");
 
-        }
-        else {
-            const unirest = require("unirest");
+        // console.log("In function isFound oldTranslation value is: " + oldTranslation);
+
+        if (oldTranslation) {
+
+            // console.log("In if block oldTranslation value is: " + oldTranslation);
+            // console.log(result[0][0]['TranslatedText']);
+
+            res.send(`Source Text: ${sText}\n Translated Text: ${result[0][0]['TranslatedText']}\nTranslated text from ${sLang} to ${tLang}`);
+
+        } else {
+
+            // API Request
             const requ = unirest("POST", "https://google-translate1.p.rapidapi.com/language/translate/v2");
+
+            // Specifying headers
             requ.headers({
                 "content-type": "application/x-www-form-urlencoded",
                 "accept-encoding": "application/gzip",
@@ -42,23 +55,24 @@ app.get('/', function (req, res) {
                 "useQueryString": true
             });
 
-
+            // Configuring form
             requ.form({
                 "q": sText,
                 "target": tLang,
                 "source": sLang
             });
 
+             // Fetching translation from the google translate api
             requ.end(async function (ress) {
                 if (ress.error) console.log(ress.error);
 
-                translatedText = await ress.body["data"]["translations"][0]['translatedText'];
-                console.log(ress.body["data"]["translations"][0]['translatedText']);
+                let translatedText = await ress.body["data"]["translations"][0]['translatedText'];
+                // console.log(ress.body["data"]["translations"][0]['translatedText']);
 
-
+                // Inserting translation into the database
                 db.insertTranslation(sText, translatedText, sLang, tLang).then(result => {
-                    // res.status(201).send("Coupon Added");
-                    console.log("uploded");
+                    // res.status(201).send("Translation Added");
+                    // console.log("uploded");
 
                 });
                 res.send(`Source Text: ${sText}\n Translated Text: ${translatedText}\nTranslated text from ${sLang} to ${tLang}`);
@@ -73,6 +87,7 @@ app.get('/', function (req, res) {
 });
 
 
+// Listening from port 3030
 app.listen(3030, function () {
     console.log('Server is running')
 });
